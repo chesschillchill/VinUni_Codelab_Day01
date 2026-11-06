@@ -109,6 +109,7 @@ class TestCallOpenAI(unittest.TestCase):
 
 class TestCallGemini(unittest.TestCase):
 
+    @patch.dict(os.environ, {"GEMINI_BASE_URL": ""}, clear=False)
     @patch("google.genai.Client")
     def test_gemini_returns_tuple_structure_new_sdk(self, MockGenAIClient):
         mock_client = MagicMock()
@@ -126,6 +127,7 @@ class TestCallGemini(unittest.TestCase):
 
 class TestCallAnthropic(unittest.TestCase):
 
+    @patch.dict(os.environ, {"ANTHROPIC_BASE_URL": ""}, clear=False)
     @patch("anthropic.Anthropic")
     def test_anthropic_returns_tuple_structure(self, MockAnthropic):
         mock_client = MagicMock()
@@ -146,11 +148,11 @@ class TestCompareModels(unittest.TestCase):
     def test_compare_models_evaluates_correct_costs(self):
         with patch.object(_m, "call_openai") as mock_openai, \
              patch.object(_m, "call_gemini") as mock_gemini:
-             
+
             # Setup mock returns
             mock_openai.side_effect = [
-                ("GPT-4o Response", 0.5, {"input_tokens": 10, "output_tokens": 20}),       # 1st call: gpt-4o
-                ("GPT-4o-Mini Response", 0.3, {"input_tokens": 10, "output_tokens": 20}),  # 2nd call: gpt-4o-mini
+                ("GPT-6.1 Sol Response", 0.5, {"input_tokens": 10, "output_tokens": 20}),  # 1st call: gpt-6.1-sol
+                ("GPT-6 Luna Response", 0.3, {"input_tokens": 10, "output_tokens": 20}),   # 2nd call: gpt-6-luna
             ]
             mock_gemini.return_value = (
                 "Gemini Response",
@@ -160,20 +162,20 @@ class TestCompareModels(unittest.TestCase):
 
             result = compare_models("Prompt")
 
-            # Verify keys exist
-            self.assertIn("gpt4o", result)
-            self.assertIn("gpt4o_mini", result)
+            # Verify keys exist (updated to match new model names)
+            self.assertIn("gpt_sol", result)
+            self.assertIn("gpt_luna", result)
             self.assertIn("gemini_flash", result)
 
-            # Verify exact cost calculations
-            # gpt-4o: (10 * 5.0 + 20 * 20.0) / 1,000,000 = 0.00045
-            self.assertAlmostEqual(result["gpt4o"]["cost"], 0.00045, places=8)
-            
-            # gpt-4o-mini: (10 * 0.150 + 20 * 0.600) / 1,000,000 = 0.0000135
-            self.assertAlmostEqual(result["gpt4o_mini"]["cost"], 0.0000135, places=8)
-            
-            # gemini-2.5-flash: (10 * 0.075 + 20 * 0.300) / 1,000,000 = 0.00000675
-            self.assertAlmostEqual(result["gemini_flash"]["cost"], 0.00000675, places=8)
+            # Verify exact cost calculations (updated to match PRICING_1M_TOKENS)
+            # gpt-6.1-sol: (10 * 2.00 + 20 * 10.00) / 1,000,000 = 0.00022
+            self.assertAlmostEqual(result["gpt_sol"]["cost"], 0.00022, places=8)
+
+            # gpt-6-luna: (10 * 0.10 + 20 * 0.50) / 1,000,000 = 0.000011
+            self.assertAlmostEqual(result["gpt_luna"]["cost"], 0.000011, places=8)
+
+            # gemini-3.8-flash: (10 * 0.75 + 20 * 3.75) / 1,000,000 = 0.00008250
+            self.assertAlmostEqual(result["gemini_flash"]["cost"], 0.00008250, places=8)
 
 
 class TestRetryWithBackoff(unittest.TestCase):
@@ -207,11 +209,11 @@ class TestBatchCompareAndFormat(unittest.TestCase):
 
     def test_batch_runs_and_formats_table(self):
         with patch.object(_m, "compare_models") as mock_comp:
-            def _get_mock():
+            def _get_mock(prompt):
                 return {
-                    "gpt4o": {"response": "GPT-4o response content here", "latency": 0.5, "cost": 0.00045, "input_tokens": 10, "output_tokens": 20},
-                    "gpt4o_mini": {"response": "GPT-4o-Mini response content here", "latency": 0.3, "cost": 0.0000135, "input_tokens": 10, "output_tokens": 20},
-                    "gemini_flash": {"response": "Gemini response content here", "latency": 0.4, "cost": 0.00000675, "input_tokens": 10, "output_tokens": 20}
+                    "gpt_sol": {"response": "GPT-6.1 Sol response content here", "latency": 0.5, "cost": 0.00022, "input_tokens": 10, "output_tokens": 20},
+                    "gpt_luna": {"response": "GPT-6 Luna response content here", "latency": 0.3, "cost": 0.000011, "input_tokens": 10, "output_tokens": 20},
+                    "gemini_flash": {"response": "Gemini response content here", "latency": 0.4, "cost": 0.00008250, "input_tokens": 10, "output_tokens": 20}
                 }
             mock_comp.side_effect = _get_mock
 
@@ -222,13 +224,14 @@ class TestBatchCompareAndFormat(unittest.TestCase):
             table = format_comparison_table(results)
             self.assertIsInstance(table, str)
             self.assertIn("Prompt", table)
-            self.assertIn("GPT-4o", table)
-            self.assertIn("Gemini-Flash", table)
+            self.assertIn("gpt_sol", table)
+            self.assertIn("gemini_flash", table)
             self.assertIn("Q1", table)
 
 
 class TestStreamingChatbot(unittest.TestCase):
 
+    @patch.dict(os.environ, {"GEMINI_BASE_URL": ""}, clear=False)
     @patch("builtins.input", side_effect=["quit"])
     @patch("google.genai.Client")
     def test_exits_cleanly(self, MockClient, mock_input):
